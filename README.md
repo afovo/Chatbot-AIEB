@@ -31,6 +31,7 @@ pip install "pypdf>=3.15.1"
 
 ```bash
 streamlit run chat_with_pdf_openai.py
+streamlit run chat_with_pdf_gemini.py
 ```
 
 
