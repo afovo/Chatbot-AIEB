@@ -23,6 +23,7 @@ pip install "langchain-community>=0.0.10"
 pip install "langchain-google-genai>=0.0.5"
 pip install "google-generativeai>=0.3.0"
 pip install "langchain-openai>=0.0.2"
+pip install "langchain-ollama"
 pip install "openai>=1.3.0"
 pip install "pypdf>=3.15.1"
 ```
@@ -30,8 +31,12 @@ pip install "pypdf>=3.15.1"
 # 2. Run the app
 
 ```bash
+
+python test_with_ollama.py
+
 streamlit run chat_with_pdf_openai.py
 streamlit run chat_with_pdf_gemini.py
+streamlit run chat_with_local_ollama.py
 ```
 
 
