@@ -28,7 +28,26 @@ pip install "openai>=1.3.0"
 pip install "pypdf>=3.15.1"
 ```
 
-# 2. Run the app
+
+# 2. Access the LLM
+
+## 2.1 Download the Ollama 
+
+https://ollama.com/download
+
+
+
+## 2.2 Get Gemini API Key 
+
+Put the API key in the `GOOGLE_API_KEY` variable in the `chat_with_pdf_gemini.py` and  `chat_with_gemini.py` file.
+
+
+## 2.3 Get OpenAI API Key 
+
+Put the API key in the `OPENAI_API_KEY` variable in the `chat_with_pdf_openai.py` file.
+
+
+# 3. Run the app
 
 ```bash
 
