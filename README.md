@@ -39,12 +39,29 @@ https://ollama.com/download
 
 ## 2.2 Get Gemini API Key 
 
+You can get the Gemini API key from the Google Cloud Console: https://aistudio.google.com/apikey.
+
 Put the API key in the `GOOGLE_API_KEY` variable in the `chat_with_pdf_gemini.py` and  `chat_with_gemini.py` file.
+
+```python
+# find and replace the GOOGLE_API_KEY in chat_with_pdf_gemini.py
+GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY'
+
+# find and replace the GOOGLE_API_KEY in chat_with_gemini.py
+GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY'
+```
 
 
 ## 2.3 Get OpenAI API Key 
 
 Put the API key in the `OPENAI_API_KEY` variable in the `chat_with_pdf_openai.py` file.
+
+```python
+# find and replace the OPENAI_API_KEY in chat_with_pdf_openai.py
+OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY'
+```
+
+
 
 
 # 3. Run the app
