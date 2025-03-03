@@ -3,13 +3,15 @@ import time
 from langchain_ollama import OllamaLLM
 
 # Function to get response from local Ollama Mistral LLM using langchain_ollama
+model = 'deepseek-r1:14b'
+
 def get_response_from_ollama(prompt):
-    ollama = OllamaLLM(model="mistral")
+    ollama = OllamaLLM(model=model)
     response = ollama.invoke(prompt)
     return response
 
 # Streamlit app
-st.title("💬 Chat with Local Ollama Mistral LLM")
+st.title(f"💬 Chat with Local Ollama {model} LLM")
 
 # Initialize chat history
 if "messages" not in st.session_state:

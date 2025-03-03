@@ -11,10 +11,12 @@ import tempfile
 import time
 import google.generativeai as genai
 
+
 # Set Google API key (replace with your key or use an env variable)
 GOOGLE_API_KEY = "YOUR_GOOGLE_API_KEY"  # Replace with your actual Gemini API key
-
 os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+
+
 
 st.set_page_config(page_title="Chat with Your PDFs (Gemini)")
 
