@@ -1,5 +1,7 @@
 # 1. Prepare your tools
 
+Feel free to skip these steps if you have already installed the tools.
+
 ## 1.1 Install Visual Studio Code (VSCode)
 
 1. Go to the [VSCode download page](https://code.visualstudio.com/download)
@@ -20,7 +22,7 @@
 
 ## 1.4 Install Miniconda
 
-1. Go to the [Miniconda download page](https://docs.conda.io/en/latest/miniconda.html)
+1. Go to the [Miniconda download page](https://www.anaconda.com/docs/getting-started/miniconda/install)
 2. Download the appropriate installer for your operating system
 3. Run the installer and follow the installation instructions
 4. Verify the installation by opening a new terminal and typing `conda --version`
