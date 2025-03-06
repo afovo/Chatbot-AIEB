@@ -60,7 +60,7 @@ pip install "openai>=1.3.0"
 pip install "pypdf>=3.15.1"
 ```
 
-In the vscode terminal, you can try the following command to make sure the environment is working:
+In the vscode terminal, use following command to confirm the environment is working:
 
 ```bash
 
@@ -81,7 +81,7 @@ Ollama allows you to run large language models locally on your computer. To inst
 4. After installation, Ollama will run as a service in the background
 5. Verify the installation by opening a terminal (you can open it in VSCode) and running `ollama --version`
 
-Once installed, you can download and run various models using commands like `ollama pull mistral` or `ollama run mistral`.
+Once installed, you can download and run LLM models using commands like `ollama pull mistral` or `ollama run mistral`.
 
 Mistral here is a small and fast model, you can try other models like `llama3.1` or `llama3.1:8b`. For more information about the models, you can visit the [Ollama website](https://ollama.com/models).
 
@@ -106,7 +106,7 @@ response = ollama.invoke("What's the capital of France?")
 print(response)
 ```
 
-In the vscode terminal, you can try the following command to make sure the ollama is working:
+In the vscode terminal, use following commands to confirm the ollama is working:
 
 ```bash
 python test_with_ollama.py # the expected output is: The capital city of France is Paris.

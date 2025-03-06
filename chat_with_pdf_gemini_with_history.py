@@ -12,9 +12,34 @@ import time
 import google.generativeai as genai
 
 
+
+
+persona = '''
+You are a helpful assistant that answers questions based on the provided documents.
+Answer the question with detailed information from the documents. If the answer is not in the documents, 
+say "I don't have enough information to answer this question." Cite specific parts of the documents when possible.
+Consider the chat history for context when answering, but prioritize information from the documents.
+'''
+
+template = """
+{persona}
+        
+Chat History:
+<history>
+{chat_history}
+</history>
+
+Given the context information and not prior knowledge, answer the following question:
+Question: {user_input}
+"""
+
+
 # Set Google API key (replace with your key or use an env variable)
 GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY' # "YOUR_GOOGLE_API_KEY"  # Replace with your actual Gemini API key
 os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+
+embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.5)
 
 
 st.set_page_config(page_title="Chat with Your PDFs (Gemini)")
@@ -48,8 +73,7 @@ if uploaded_files:
 
                 # Generate embeddings and store in FAISS
                 # ------------------------------------------------- #
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-
+                
                 # use your embeddings model here
                 st.session_state.vector_store = FAISS.from_documents(docs, embeddings)
                 # ------------------------------------------------- #
@@ -77,33 +101,28 @@ if uploaded_files:
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        
-        
         # Configure retriever with more advanced parameters
         retriever = st.session_state.vector_store.as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
             search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}  # Adjust these parameters as needed
         )
         
-        # Define a custom prompt template for the chatbot
-        # from langchain.prompts import PromptTemplate
-
-        # Create a custom prompt template
-        template = """You are a helpful assistant that answers questions based on the provided documents.
+        # Get chat history for context
+        chat_history = ""
+        if len(st.session_state.messages) > 1:  # If there are previous messages
+            for i, msg in enumerate(st.session_state.messages[:-1]):  # Exclude the current user message
+                role = "User" if msg["role"] == "user" else "Assistant"
+                chat_history += f"{role}: {msg['content']}\n\n"
         
-        Given the context information and not prior knowledge, answer the following question:
-        Question: {user_input}
+        # Create a custom prompt template with chat history
         
-        Answer the question with detailed information from the documents. If the answer is not in the documents, 
-        say "I don't have enough information to answer this question." Cite specific parts of the documents when possible.
-        """
         
         # Create the QA chain with the custom prompt
         # The RetrievalQA chain will automatically handle getting the context from the retriever
         # and formatting it with the prompt template
         qa_chain = RetrievalQA.from_chain_type(
             ## use your llm model here
-            llm=ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.5),
+            llm=llm,
             retriever=retriever,
             chain_type="stuff",  # "stuff" chain type puts all retrieved documents into the prompt context
             return_source_documents=True,  # Return source documents for reference
@@ -122,7 +141,13 @@ if uploaded_files:
             # 2. Retrieves relevant documents using the retriever
             # 3. Formats those documents as the context in the prompt
             # 4. Sends the formatted prompt to the LLM
-            response = qa_chain.invoke({"query": template.format(user_input =user_input)})
+            response = qa_chain.invoke({
+                "query": template.format(
+                    persona=persona,
+                    user_input=user_input,
+                    chat_history=chat_history
+                ),
+            })
             
             # For debugging, you can see what's in the response
             # st.write("Response keys:", list(response.keys()))

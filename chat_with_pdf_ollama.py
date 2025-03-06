@@ -4,22 +4,29 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_ollama import OllamaEmbeddings, OllamaLLM
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 import tempfile
 import time
-import google.generativeai as genai
 
 
-# Set Google API key (replace with your key or use an env variable)
-GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY' # "YOUR_GOOGLE_API_KEY"  # Replace with your actual Gemini API key
-os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+# make sure you have the following models pulled already with ollama.
+# ollama pull mistral
+# ollama pull nomic-embed-text
+
+# Set Ollama model names
+OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"  # Embedding model for Ollama
+OLLAMA_LLM_MODEL = "mistral" # "deepseek-r1:14b"  # LLM model for Ollama
+
+llm = OllamaLLM(model=OLLAMA_LLM_MODEL, temperature=0.5)
+embeddings = OllamaEmbeddings(model=OLLAMA_EMBEDDING_MODEL)
 
 
-st.set_page_config(page_title="Chat with Your PDFs (Gemini)")
 
-st.title("📄💬 Chat with Your PDFs (Gemini)")
+st.set_page_config(page_title="Chat with Your PDFs (Ollama)")
+
+st.title("📄💬 Chat with Your PDFs (Ollama)")
 
 # File uploader
 uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
@@ -48,9 +55,9 @@ if uploaded_files:
 
                 # Generate embeddings and store in FAISS
                 # ------------------------------------------------- #
-                embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-
-                # use your embeddings model here
+                
+                # use Ollama embeddings model
+                ############## building your vector store ##############
                 st.session_state.vector_store = FAISS.from_documents(docs, embeddings)
                 # ------------------------------------------------- #
 
@@ -77,66 +84,56 @@ if uploaded_files:
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        
-        
-        # Configure retriever with more advanced parameters
+        # ------------------------------------------------- #
+        # Create QA chain with return_source_documents=True to get retrieved chunks
+
         retriever = st.session_state.vector_store.as_retriever(
-            search_type="mmr",  # Maximum Marginal Relevance
-            search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}  # Adjust these parameters as needed
+            search_type="mmr",
+            search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}
         )
         
-        # Define a custom prompt template for the chatbot
-        # from langchain.prompts import PromptTemplate
+        # llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.5)
 
-        # Create a custom prompt template
-        template = """You are a helpful assistant that answers questions based on the provided documents.
-        
-        Given the context information and not prior knowledge, answer the following question:
-        Question: {user_input}
-        
-        Answer the question with detailed information from the documents. If the answer is not in the documents, 
-        say "I don't have enough information to answer this question." Cite specific parts of the documents when possible.
-        """
-        
-        # Create the QA chain with the custom prompt
-        # The RetrievalQA chain will automatically handle getting the context from the retriever
-        # and formatting it with the prompt template
         qa_chain = RetrievalQA.from_chain_type(
-            ## use your llm model here
-            llm=ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.5),
+            ## use Ollama LLM model
+            llm=llm,
             retriever=retriever,
-            chain_type="stuff",  # "stuff" chain type puts all retrieved documents into the prompt context
-            return_source_documents=True,  # Return source documents for reference
-            verbose = True,
+            chain_type="stuff",
+            return_source_documents=True,  # This will return the source documents
+            verbose=True,  # Enable verbose mode to see the full prompt
             chain_type_kwargs={
-                # "prompt": CUSTOM_PROMPT,  # Use the custom prompt
-                "verbose": True  # Enable verbose mode to see the full prompt
+                "verbose": True  # Enable verbose mode in the chain itself
+                # "prompt": You can add your custom prompt here.
             }
         )
         # ------------------------------------------------- #
         
         # Get response from the chatbot with spinner
         with st.spinner("Thinking..."):
-            # The RetrievalQA chain automatically:
-            # 1. Takes the query
-            # 2. Retrieves relevant documents using the retriever
-            # 3. Formats those documents as the context in the prompt
-            # 4. Sends the formatted prompt to the LLM
-            response = qa_chain.invoke({"query": template.format(user_input =user_input)})
+            response = qa_chain.invoke({"query": user_input})
+
+            # print([i for i in response])
+
+            # Display retrieved chunks in an expander
+            with st.expander("View Retrieved Chunks"):
+                for i, doc in enumerate(response["source_documents"]):
+                    st.markdown(f"**Chunk {i+1}**")
+                    st.markdown(f"**Content:** {doc.page_content}")
+                    st.markdown(f"**Source:** Page {doc.metadata.get('page', 'unknown')}")
+                    st.markdown("---")
             
-            # For debugging, you can see what's in the response
-            # st.write("Response keys:", list(response.keys()))
-            
-            # Display retrieved chunks in an expander if source documents are available
-            if "source_documents" in response:
-                with st.expander("View Retrieved Chunks (Context)"):
-                    for i, doc in enumerate(response["source_documents"]):
-                        st.markdown(f"**Chunk {i+1}**")
-                        st.markdown(f"**Content:** {doc.page_content}")
-                        st.markdown(f"**Source:** Page {doc.metadata.get('page', 'unknown')}")
-                        st.markdown("---")
-            
+            # Display the final prompt sent to the LLM
+            # with st.expander("View Final Prompt to LLM"):
+            #     # Since return_generated_question is not supported, we'll just show the user query
+            #     st.markdown(response["query"])
+            #     # st.markdown(user_input)
+            #     # st.markdown("**Context:** (Combined with retrieved chunks)")
+
+            st.markdown(response)
+                    
             response_text = response["result"]
+            
+        
         # Display assistant response
         # with st.chat_message("assistant"):
         #     st.markdown(response_text)
