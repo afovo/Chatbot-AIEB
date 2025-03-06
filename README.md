@@ -46,30 +46,25 @@ conda activate chatbot
 conda install -c conda-forge streamlit faiss-cpu pdf2image pytesseract pillow
 
 # Install the remaining packages using pip
-# Option 1: Install using requirements.txt
-pip install -r requirements.txt
-
-# Option 2: Install packages individually if you don't have requirements.txt
-pip install "langchain>=0.1.0"
-pip install "langchain-community>=0.0.10"
-pip install "langchain-google-genai>=0.0.5"
-pip install "google-generativeai>=0.3.0"
-pip install "langchain-openai>=0.0.2"
-pip install "langchain-ollama"
-pip install "openai>=1.3.0"
-pip install "pypdf>=3.15.1"
+pip install "langchain>=0.1.0"  # Core LangChain framework for building LLM applications
+pip install "langchain-community>=0.0.10"  # Community integrations for LangChain, like RAG tools
+pip install "langchain-google-genai>=0.0.5"  # Google Generative AI (Gemini) integration for LangChain
+pip install "google-generativeai>=0.3.0"  # Google's official Python SDK for Gemini models
+pip install "langchain-openai>=0.0.2"  # OpenAI integration for LangChain
+pip install "langchain-ollama"  # Ollama integration for running local LLMs with LangChain
+pip install "openai>=1.3.0"  # OpenAI's official Python SDK for GPT models
+pip install "pypdf>=3.15.1"  # Library for reading and extracting text from PDF files
 ```
 
 In the vscode terminal, use following command to confirm the environment is working:
 
 ```bash
-
 conda activate chatbot
 which python # should return /Users/your_username/miniconda3/envs/chatbot/bin/python
 ```
 
 
-# 2. Access the LLM
+# 2. Run Chatbot with Local LLM
 
 ## 2.1 Download and Install Ollama
 
@@ -85,10 +80,17 @@ Once installed, you can download and run LLM models using commands like `ollama 
 
 Mistral here is a small and fast model, you can try other models like `llama3.1` or `llama3.1:8b`. For more information about the models, you can visit the [Ollama website](https://ollama.com/models).
 
-You can also try the following command in the vscode terminal to make sure it's working:
+Use the following command in the vscode terminal to make sure it's working:
 
 ```bash
 ollama --version # should return a version number like 0.5.12
+```
+
+
+Pull the model you want to use:
+
+```bash
+ollama pull mistral
 ```
 
 You can start to chat with the model by running the following command:
@@ -97,10 +99,21 @@ You can start to chat with the model by running the following command:
 ollama run mistral # should return a prompt to enter a message # entry /bye to exit
 ```
 
+Besides the LLM, we also need to install the embedding model. Here we use the `nomic-embed-text` model.
+
+```bash
+ollama pull nomic-embed-text
+```
+
+## 2.2 Test the ollama model
+
+**use the ollama model in the python code**
+
 You can also try whether the ollama can work with the `test_with_ollama.py` file.
 
 If you check the python code, you will find that it will call the ollama model to answer the question.
 ```python
+# in the python script.
 ollama = OllamaLLM(model="mistral")
 response = ollama.invoke("What's the capital of France?")
 print(response)
@@ -109,16 +122,51 @@ print(response)
 In the vscode terminal, use following commands to confirm the ollama is working:
 
 ```bash
+# in the terminal, run the following command
 python test_with_ollama.py # the expected output is: The capital city of France is Paris.
 ```
 
 
+## 2.3 Run the Chatbot App 
 
-## 2.2 Get Gemini API Key 
+Now you have the ollama model and the embedding model. 
+
+
+You can run the chatbot.
+
+
+To run the chatbot with Ollama, you have three options:
+
+**Basic Ollama Chatbot**
+```bash
+streamlit run chat_with_local_ollama.py
+```
+
+**Basic Ollama Chatbot with PDF**
+```bash
+streamlit run chat_with_pdf_ollama.py
+```
+
+**Basic Ollama Chatbot with PDF and Historical Context**
+```bash
+streamlit run chat_with_pdf_ollama_with_history.py
+```
+
+
+
+
+
+
+# 3. Run Chatbot with Remote LLM
+
+## 3.1 Get Gemini API Key 
 
 You can get the Gemini API key from the Google Cloud Console: https://aistudio.google.com/apikey.
 
-Put the API key in the `GOOGLE_API_KEY` variable in the `chat_with_pdf_gemini.py` and  `chat_with_gemini.py` file.
+Put the API key in the `GOOGLE_API_KEY` variable in 
+* `chat_with_pdf_gemini.py` 
+* `chat_with_gemini.py` file.
+* `chat_with_pdf_gemini_with_history.py` file.
 
 ```python
 # find and replace the GOOGLE_API_KEY in chat_with_pdf_gemini.py
@@ -128,8 +176,27 @@ GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY'
 GOOGLE_API_KEY = 'YOUR_GOOGLE_API_KEY'
 ```
 
+## 3.2 Run the Chatbot App 
 
-## 2.3 Get OpenAI API Key 
+To run the chatbot with Ollama, you have three options:
+
+**Basic Gemini Chatbot**
+```bash
+streamlit run chat_with_pdf_gemini.py
+```
+
+**Basic Gemini Chatbot with PDF**
+```bash
+streamlit run chat_with_pdf_gemini.py
+```
+
+**Basic Gemini Chatbot with PDF and Historical Context**
+```bash
+streamlit run chat_with_pdf_gemini_with_history.py
+```
+
+
+## 3.3 Other Options
 
 Put the API key in the `OPENAI_API_KEY` variable in the `chat_with_pdf_openai.py` file.
 
@@ -137,17 +204,4 @@ Put the API key in the `OPENAI_API_KEY` variable in the `chat_with_pdf_openai.py
 # find and replace the OPENAI_API_KEY in chat_with_pdf_openai.py
 OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY'
 ```
-
-
-# 3. Run the app
-
-```bash
-
-python test_with_ollama.py
-
-streamlit run chat_with_pdf_openai.py
-streamlit run chat_with_pdf_gemini.py
-streamlit run chat_with_local_ollama.py
-```
-
 
