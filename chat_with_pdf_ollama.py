@@ -11,7 +11,7 @@ import tempfile
 import time
 
 
-# make sure you have the following models pulled already with ollama.222222222
+# make sure you have the following models pulled already with ollama.
 # ollama pull mistral
 # ollama pull nomic-embed-text
 
