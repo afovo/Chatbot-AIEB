@@ -13,7 +13,7 @@ import google.generativeai as genai
 
 
 # Set Google API key (replace with your key or use an env variable)
-GOOGLE_API_KEY = 'AIzaSyDz5lN18mHKEdnbV5Nc66e-8aJr2o_Cc2I' # "YOUR_GOOGLE_API_KEY"  # Replace with your actual Gemini API key
+GOOGLE_API_KEY = '' # "YOUR_GOOGLE_API_KEY"  # Replace with your actual Gemini API key
 os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 
 
