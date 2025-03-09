@@ -2,7 +2,7 @@ import streamlit as st
 import time
 from langchain_ollama import OllamaLLM
 
-# Function to get response from local Ollama Mistral LLM using langchain_ollama
+# Function to get response from local Ollama Mistral LLM using langchain_ollama11111111111
 model = 'deepseek-r1:14b'
 
 def get_response_from_ollama(prompt):
