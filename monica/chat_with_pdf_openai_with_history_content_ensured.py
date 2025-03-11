@@ -4,15 +4,17 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
+from langchain.docstore.document import Document
 import tempfile
 import time
 import re
 import logging
 from collections import defaultdict
+from typing import List
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -138,16 +140,10 @@ def extract_toc_structure(text):
     
     return structure
 
-def create_document_chunks(pages, toc_structure=None, page_offset=0):
+#
+def toc_splitting(pages, toc_structure=None, page_offset=0):
     """Create document chunks, potentially using TOC structure for better chunking"""
     docs = []
-    
-    if not toc_structure:
-        # Standard chunking if no TOC found
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        docs = text_splitter.split_documents(pages)
-        return docs
-    
     # Flatten the TOC structure for easier lookup
     flat_toc = {}
     for part, items in toc_structure.items():
@@ -192,6 +188,150 @@ def create_document_chunks(pages, toc_structure=None, page_offset=0):
         docs.extend(section_chunks)
     
     return docs
+
+def add_toc_metadata(pages, toc_structure=None, page_offset=0):
+    """Assign section metadata to pages based on TOC structure without chunking"""
+    # Return original pages if no TOC structure is provided
+    if not toc_structure:
+        return pages
+    
+    # Flatten the TOC structure for easier lookup
+    flat_toc = {}
+    for part, items in toc_structure.items():
+        for item_num, item_data in items.items():
+            key = f"Part {part} - Item {item_num}"
+            if item_data["page"] is not None:
+                flat_toc[item_data["page"]] = {
+                    "key": key,
+                    "title": item_data["title"]
+                }
+    
+    # Set current section to track which section each page belongs to
+    current_section = "Introduction"
+    current_section_metadata = {"section": current_section}
+    
+    # Iterate through pages and add section metadata
+    for page in pages:
+        pdf_page_num = page.metadata.get('page', 0)  # PDF pages are 0-indexed
+        # Convert to displayed page number
+        displayed_page_num = pdf_page_num + page_offset
+        
+        # Check if this page starts a new section
+        if displayed_page_num in flat_toc:
+            current_section = f"{flat_toc[displayed_page_num]['key']}: {flat_toc[displayed_page_num]['title']}"
+            current_section_metadata = {
+                "section": current_section,
+                "part": flat_toc[displayed_page_num]["key"].split(" - ")[0],
+                "item": flat_toc[displayed_page_num]["key"].split(" - ")[1],
+                "title": flat_toc[displayed_page_num]["title"]
+            }
+        
+        # Add the section metadata to the page
+        for key, value in current_section_metadata.items():
+            page.metadata[key] = value
+    
+    # Return the pages with added metadata
+    return pages
+
+def extract_headers_as_markdown(doc: Document) -> str:
+    """
+    Extract headers and content from document and format as markdown
+    
+    Args:
+        doc: Document to extract headers from
+        
+    Returns:
+        Markdown-formatted content
+    """
+    content = doc.page_content
+    
+    # Simple heuristic to identify potential headers
+    lines = content.split('\n')
+    markdown_content = ""
+    
+    for line in lines:
+        line = line.strip()
+        # Skip empty lines
+        if not line:
+            markdown_content += "\n"
+            continue
+            
+        # Check for Item headers (10-K specific)
+        if re.match(r'^Item\s+\d+[A-Z]?\.', line, re.IGNORECASE):
+            markdown_content += f"# {line}\n\n"
+        # Check for Part headers
+        elif re.match(r'^PART\s+[IVX]+', line):
+            markdown_content += f"# {line}\n\n"
+        # Potential header detection heuristics
+        elif len(line) < 100 and line.endswith(':'):
+            markdown_content += f"## {line}\n\n"
+        elif len(line) < 80 and line.isupper():
+            markdown_content += f"## {line}\n\n"
+        elif re.match(r'^\d+(\.\d+)*\s+', line):  # Numbered sections
+            markdown_content += f"### {line}\n\n"
+        else:
+            markdown_content += f"{line}\n"
+    
+    return markdown_content
+
+def structure_splitting(documents: List[Document]) -> List[Document]:
+    """
+    Split PDFs with awareness of document structure and markdown headers
+    
+    Args:
+        documents: List of documents to split
+        
+    Returns:
+        List of split documents
+    """
+    # Define headers
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),
+        ("###", "Header 3"),
+    ]
+    
+    md_header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+    
+    structured_docs = []
+    for doc in documents:
+        # Convert to markdown-like format
+        md_content = extract_headers_as_markdown(doc)
+        
+        # Try to split by headers
+        try:
+            header_split_docs = md_header_splitter.split_text(md_content)
+        except Exception:
+            # Fallback if header splitting fails
+            header_split_docs = [Document(page_content=md_content, metadata=doc.metadata)]
+        
+        # Further split large sections
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=100,
+            separators=["\n\n", "\n", ".", " ", ""],
+            keep_separator=True
+        )
+        
+        for header_doc in header_split_docs:
+            chunks = text_splitter.split_text(header_doc.page_content)
+            for chunk in chunks:
+                metadata = {}
+                if hasattr(header_doc, 'metadata'):
+                    metadata.update(header_doc.metadata)
+                
+                # Preserve original document metadata
+                for key, value in doc.metadata.items():
+                    if key not in metadata:
+                        metadata[key] = value
+                
+                structured_doc = Document(
+                    page_content=chunk,
+                    metadata=metadata
+                )
+                structured_docs.append(structured_doc)
+                
+    return structured_docs
 
 if uploaded_files:
     documents = []
@@ -247,18 +387,19 @@ if uploaded_files:
                     file_pages = [p for p in all_pages if p.metadata['source_file'] == file_name]
                     toc_structure = toc_structures.get(file_name)
                     page_offset = page_offsets.get(file_name, 0)
-                    
-                    # Create chunks for this file
-                    file_docs = create_document_chunks(file_pages, toc_structure, page_offset)
+                    # Create toc chunks for this file
+                    # file_docs = toc_splitting(file_pages, toc_structure, page_offset)
+                    file_docs = add_toc_metadata(file_pages, toc_structure, page_offset)
                     documents.extend(file_docs)
+                # Split documents into chunks with structure awareness
+                structured_docs = structure_splitting(documents)
                 
-                logging.info(f"Created {len(documents)} document chunks from {len(uploaded_files)} files")
-
+                logging.info(f"Created {len(structured_docs)} document chunks from {len(uploaded_files)} files")
                 # Generate embeddings and store in FAISS
                 # ------------------------------------------------- #
                 embeddings = OpenAIEmbeddings()
                 # use your embeddings model here
-                st.session_state.vector_store = FAISS.from_documents(documents, embeddings)
+                st.session_state.vector_store = FAISS.from_documents(structured_docs, embeddings)
                 # ------------------------------------------------- #
 
         st.success("✅ PDFs uploaded and processed! You can now start chatting.")
@@ -286,7 +427,7 @@ if uploaded_files:
         # Configure retriever with more advanced parameters
         retriever = st.session_state.vector_store.as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
-            search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}  # Adjust these parameters as needed
+            search_kwargs={"k": 6, "fetch_k": 30, "lambda_mult": 0.8}  # Adjust these parameters as needed
         )
         
         # Get chat history for context
