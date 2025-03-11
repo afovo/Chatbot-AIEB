@@ -427,7 +427,7 @@ if uploaded_files:
         # Configure retriever with more advanced parameters
         retriever = st.session_state.vector_store.as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
-            search_kwargs={"k": 6, "fetch_k": 30, "lambda_mult": 0.8}  # Adjust these parameters as needed
+            search_kwargs={"k": 8, "fetch_k": 40, "lambda_mult": 0.8}  # Adjust these parameters as needed
         )
         
         # Get chat history for context
