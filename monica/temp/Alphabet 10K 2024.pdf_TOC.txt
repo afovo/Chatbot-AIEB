@@ -1,0 +1,94 @@
+{
+    "I": {
+        "1": {
+            "title": "Business",
+            "page": 4
+        },
+        "1A": {
+            "title": "Risk Factors",
+            "page": 10
+        },
+        "1B": {
+            "title": "Unresolved Staff Comments",
+            "page": 25
+        },
+        "1C": {
+            "title": "Cybersecurity",
+            "page": 25
+        },
+        "2": {
+            "title": "Properties",
+            "page": 26
+        },
+        "3": {
+            "title": "Legal Proceedings",
+            "page": 26
+        },
+        "4": {
+            "title": "Mine Safety Disclosures",
+            "page": 26
+        }
+    },
+    "II": {
+        "6": {
+            "title": "[Reserved]",
+            "page": 29
+        },
+        "7": {
+            "title": "Management’s Discussion and Analysis of Financial Condition and Results of Operations",
+            "page": 30
+        },
+        "7A": {
+            "title": "Quantitative and Qualitative Disclosures About Market Risk",
+            "page": 45
+        },
+        "8": {
+            "title": "Financial Statements and Supplementary Data",
+            "page": 48
+        },
+        "9": {
+            "title": "Changes in and Disagreements With Accountants on Accounting and Financial Disclosure",
+            "page": 90
+        },
+        "9A": {
+            "title": "Controls and Procedures",
+            "page": 90
+        },
+        "9B": {
+            "title": "Other Information",
+            "page": 90
+        },
+        "9C": {
+            "title": "Disclosure Regarding Foreign Jurisdictions that Prevent Inspections",
+            "page": 91
+        }
+    },
+    "III": {
+        "10": {
+            "title": "Directors, Executive Officers, and Corporate Governance",
+            "page": 92
+        },
+        "11": {
+            "title": "Executive Compensation",
+            "page": 92
+        },
+        "13": {
+            "title": "Certain Relationships and Related Transactions, and Director Independence",
+            "page": 92
+        },
+        "14": {
+            "title": "Principal Accountant Fees and Services",
+            "page": 92
+        }
+    },
+    "IV": {
+        "15": {
+            "title": "Exhibits, Financial Statement Schedules",
+            "page": 93
+        },
+        "16": {
+            "title": "Form 10-K Summary",
+            "page": 96
+        }
+    }
+}
