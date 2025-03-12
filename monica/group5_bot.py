@@ -140,9 +140,9 @@ def extract_toc_structure(text):
     
     return structure
 
-#
+# Deprecated
 def toc_splitting(pages, toc_structure=None, page_offset=0):
-    """Create document chunks, potentially using TOC structure for better chunking"""
+    """[Deprecated]Use TOC structure to create document chunks"""
     docs = []
     # Flatten the TOC structure for easier lookup
     flat_toc = {}
@@ -205,7 +205,6 @@ def add_toc_metadata(pages, toc_structure=None, page_offset=0):
                     "key": key,
                     "title": item_data["title"]
                 }
-    
     # Set current section to track which section each page belongs to
     current_section = "Introduction"
     current_section_metadata = {"section": current_section}
@@ -225,15 +224,13 @@ def add_toc_metadata(pages, toc_structure=None, page_offset=0):
                 "item": flat_toc[displayed_page_num]["key"].split(" - ")[1],
                 "title": flat_toc[displayed_page_num]["title"]
             }
-        
         # Add the section metadata to the page
         for key, value in current_section_metadata.items():
             page.metadata[key] = value
-    
     # Return the pages with added metadata
     return pages
 
-def extract_headers_as_markdown(doc: Document) -> str:
+def extract_headers_as_markdown(doc: Document) -> tuple[str, dict]:
     """
     Extract headers and content from document and format as markdown
     
@@ -241,7 +238,7 @@ def extract_headers_as_markdown(doc: Document) -> str:
         doc: Document to extract headers from
         
     Returns:
-        Markdown-formatted content
+        Tuple of (markdown-formatted content, header metadata)
     """
     content = doc.page_content
     
@@ -249,30 +246,59 @@ def extract_headers_as_markdown(doc: Document) -> str:
     lines = content.split('\n')
     markdown_content = ""
     
+    # Track the most recent headers at each level
+    header_metadata = {
+        "h1": None,
+        "h2": None,
+        "h3": None
+    }
+    
+    # Track the current position for possible headers
+    current_line_num = 0
+    
     for line in lines:
         line = line.strip()
-        # Skip empty lines
+        current_line_num += 1
         if not line:
             markdown_content += "\n"
             continue
-            
+        
         # Check for Item headers (10-K specific)
         if re.match(r'^Item\s+\d+[A-Z]?\.', line, re.IGNORECASE):
+            header_metadata["h1"] = line
+            header_metadata["h2"] = None  # Reset lower level headers
+            header_metadata["h3"] = None
             markdown_content += f"# {line}\n\n"
+        
         # Check for Part headers
         elif re.match(r'^PART\s+[IVX]+', line):
+            header_metadata["h1"] = line
+            header_metadata["h2"] = None  # Reset lower level headers
+            header_metadata["h3"] = None
             markdown_content += f"# {line}\n\n"
-        # Potential header detection heuristics
-        elif len(line) < 100 and line.endswith(':'):
+        
+        # Potential subheader detection
+        elif line.endswith(':'):
+            header_metadata["h2"] = line
+            header_metadata["h3"] = None  # Reset lower level headers
             markdown_content += f"## {line}\n\n"
-        elif len(line) < 80 and line.isupper():
+        
+        # All caps as potential subheaders
+        elif line.isupper():
+            header_metadata["h2"] = line
+            header_metadata["h3"] = None  # Reset lower level headers
             markdown_content += f"## {line}\n\n"
-        elif re.match(r'^\d+(\.\d+)*\s+', line):  # Numbered sections
+        
+        # Numbered sections
+        elif re.match(r'^\d+(\.\d+)*\s+', line):
+            header_metadata["h3"] = line
             markdown_content += f"### {line}\n\n"
+        
+        # Regular content
         else:
             markdown_content += f"{line}\n"
     
-    return markdown_content
+    return markdown_content, header_metadata
 
 def structure_splitting(documents: List[Document]) -> List[Document]:
     """
@@ -286,53 +312,104 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
     """
     # Define headers
     headers_to_split_on = [
-        ("#", "Header 1"),
-        ("##", "Header 2"),
-        ("###", "Header 3"),
+        ("#", "h1"),     # Map markdown # to h1 in metadata
+        ("##", "h2"),    # Map markdown ## to h2 in metadata
+        ("###", "h3"),   # Map markdown ### to h3 in metadata
     ]
     
     md_header_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
     
     structured_docs = []
     for doc in documents:
-        # Convert to markdown-like format
-        md_content = extract_headers_as_markdown(doc)
+        # Preserve existing TOC metadata from the document
+        toc_metadata = {k: v for k, v in doc.metadata.items() 
+                       if k in ['section', 'part', 'item', 'title']}
+        # Convert to markdown-like format and get header metadata
+        md_content, original_headers = extract_headers_as_markdown(doc)
         
         # Try to split by headers
         try:
             header_split_docs = md_header_splitter.split_text(md_content)
-        except Exception:
-            # Fallback if header splitting fails
-            header_split_docs = [Document(page_content=md_content, metadata=doc.metadata)]
-        
-        # Further split large sections
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=100,
-            separators=["\n\n", "\n", ".", " ", ""],
-            keep_separator=True
-        )
-        
-        for header_doc in header_split_docs:
-            chunks = text_splitter.split_text(header_doc.page_content)
-            for chunk in chunks:
-                metadata = {}
-                if hasattr(header_doc, 'metadata'):
-                    metadata.update(header_doc.metadata)
+            
+            # Process header split docs
+            for header_doc in header_split_docs:
+                # Start with existing TOC metadata
+                combined_metadata = toc_metadata.copy()
                 
-                # Preserve original document metadata
-                for key, value in doc.metadata.items():
-                    if key not in metadata:
-                        metadata[key] = value
+                # Add header path to metadata
+                header_path = []
+                for level in ["h1", "h2", "h3"]:
+                    if level in header_doc.metadata and header_doc.metadata[level]:
+                        header_path.append(header_doc.metadata[level])
+                        # Also add individual header level to combined metadata
+                        combined_metadata[f"header_{level}"] = header_doc.metadata[level]
+                
+                if header_path:
+                    combined_metadata["header_path"] = " > ".join(header_path)
+                
+                # Further split large sections
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=500,
+                    chunk_overlap=100,
+                    separators=["\n\n", "\n", ".", " ", ""],
+                    keep_separator=True
+                )
+                
+                chunks = text_splitter.split_text(header_doc.page_content)
+                
+                for i, chunk in enumerate(chunks):
+                    # Create comprehensive metadata for this chunk
+                    chunk_metadata = {
+                        "chunk_index": i,
+                        "split_method": "header_then_text"
+                    }
+                    
+                    # Add combined TOC and header metadata
+                    chunk_metadata.update(combined_metadata)
+                    
+                    # Add original document metadata
+                    for key, value in doc.metadata.items():
+                        if key not in chunk_metadata:
+                            chunk_metadata[key] = value
+                    
+                    # Add this chunk to results
+                    structured_doc = Document(
+                        page_content=chunk,
+                        metadata=chunk_metadata
+                    )
+                    structured_docs.append(structured_doc)
+                
+        except Exception as e:
+            # Fallback for documents that can't be split by headers
+            logging.warning(f"Header splitting failed: {str(e)}. Using fallback method.")
+            
+            # Combine TOC metadata with original header metadata from extraction
+            fallback_metadata = doc.metadata.copy()
+            for key, value in original_headers.items():
+                if value:  # Only add non-None headers
+                    fallback_metadata[f"header_{key}"] = value
+            
+            # Perform regular text splitting
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=500,
+                chunk_overlap=100,
+                separators=["\n\n", "\n", ".", " ", ""],
+                keep_separator=True
+            )
+            
+            chunks = text_splitter.split_text(doc.page_content)
+            for i, chunk in enumerate(chunks):
+                chunk_metadata = fallback_metadata.copy()
+                chunk_metadata["chunk_index"] = i
+                chunk_metadata["split_method"] = "fallback_text_only"
                 
                 structured_doc = Document(
                     page_content=chunk,
-                    metadata=metadata
+                    metadata=chunk_metadata
                 )
                 structured_docs.append(structured_doc)
                 
     return structured_docs
-
 if uploaded_files:
     documents = []
     
@@ -365,14 +442,14 @@ if uploaded_files:
                                 toc_structure = extract_toc_structure(page.page_content if file.name!="MSFT 10-K.pdf" else page.page_content+pdf_pages[i+1].page_content)
                                 toc_structures[file.name] = toc_structure
                                 logging.info(f"Extracted TOC structure: {toc_structure}")
-                                with open(f'C:/Projects/Chatbot-AIEB/monica/temp/{file.name}_TOC.txt', 'w', encoding='utf-8') as file:
-                                    json.dump(toc_structure, file, ensure_ascii=False, indent=4)
+                                with open(f'C:/Projects/Chatbot-AIEB/monica/temp/{file.name}_TOC.txt', 'w', encoding='utf-8') as file1:
+                                    json.dump(toc_structure, file1, ensure_ascii=False, indent=4)
                                 break
                             except Exception as e:
                                 logging.error(f"Error extracting TOC: {e}")
                     
                     page_offset = (2-i) if toc_found else 0
-                    if file.name=="MSFT 10-K.pdf":
+                    if file.name=="MSFT 10-K.pdf": # brute force :(
                         page_offset -= 1
                     page_offsets[file.name] = page_offset
                     logging.info(f"Page offset for {file.name}: {page_offset}")
@@ -478,7 +555,7 @@ if uploaded_files:
                         section_info = f"**Section:** {doc.metadata.get('section', 'Unknown')}" if 'section' in doc.metadata else ""
                         if section_info:
                             st.markdown(section_info)
-                        st.markdown(f"**Source:** {doc.metadata.get('source_file', 'Unknown')}, Page {doc.metadata.get('page', 'unknown')}")
+                        st.markdown(f"**Source:** {doc.metadata.get('source_file', 'Unknown')}, Page {doc.metadata.get('page', 'Unknown')}, Level: {doc.metadata.get('header_path','Unknown')}")
                         st.markdown("---")
             
             response_text = response["result"]
