@@ -7,7 +7,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
+from langchain.chains import RetrievalQA, LLMChain
+from langchain.prompts import PromptTemplate
 from langchain.docstore.document import Document
 import tempfile
 import time
@@ -41,6 +42,85 @@ Chat History:
 Given the context information and not prior knowledge, answer the following question:
 Question: {user_input}
 """
+
+# Define financial table processing function
+def process_financial_tables(table_chunks, query, llm):
+    """
+    Process financial table data with specialized handling
+    
+    Args:
+        table_chunks: List of document chunks with financial table data
+        query: The user's original query
+        llm: The language model to use for processing
+        
+    Returns:
+        Processed table information as a string and analysis result
+    """
+    if not table_chunks:
+        return "", {}
+    
+    # Create specialized prompt for table processing
+    table_prompt = """
+    You are a financial data expert analyzing tabular data from financial documents. 
+    The data below appears in raw text format extracted from a PDF financial document.
+    
+    First, analyze the structure of this tabular data:
+    1. Identify headers, columns, rows, and what kind of financial table this is
+    2. Reconstruct the table's structure to understand the relationships between items
+    3. Determine the financial metrics, time periods, and any important trends or values
+    
+    Then, answer this specific question using ONLY the information in this table data:
+    {question}
+    
+    Table data:
+    {table_data}
+    
+    Provide a clear, concise answer with specific numbers and metrics from the table.
+    Include any relevant calculations clearly explained.
+    If you cannot answer the question based SOLELY on this table data, state that clearly.
+    """
+    
+    # Combine all table chunks into a single context
+    combined_table_data = "\n\n".join([
+        f"--- TABLE FROM {chunk.metadata.get('source_file', 'Unknown')}, " +
+        f"PAGE {chunk.metadata.get('page', 'Unknown')}, " +
+        f"SECTION {chunk.metadata.get('section', 'Unknown Section')} ---\n" +
+        chunk.page_content
+        for chunk in table_chunks
+    ])
+    
+    logging.info(f"Processing {len(table_chunks)} financial table chunks")
+    
+    # Create a more specific query for table analysis
+    table_specific_query = f"Based on the financial tables provided, {query}"
+    
+    # Get response from LLM for table processing
+    prompt_template = PromptTemplate(
+        input_variables=["question", "table_data"],
+        template=table_prompt
+    )
+    
+    table_chain = LLMChain(
+        llm=llm,
+        prompt=prompt_template,
+        verbose=True
+    )
+    
+    try:
+        table_response = table_chain.invoke({
+            "question": table_specific_query,
+            "table_data": combined_table_data
+        })
+        
+        table_analysis = table_response.get('text', '')
+        return f"""
+        Financial Table Analysis:
+        {table_analysis}
+        
+        """, table_response
+    except Exception as e:
+        logging.error(f"Error processing financial tables: {str(e)}")
+        return f"Error processing financial tables: {str(e)}", {}
 
 
 st.set_page_config(page_title="Chat with Your PDFs (OpenAI)")
@@ -140,54 +220,61 @@ def extract_toc_structure(text):
     
     return structure
 
-# Deprecated
-def toc_splitting(pages, toc_structure=None, page_offset=0):
-    """[Deprecated]Use TOC structure to create document chunks"""
-    docs = []
-    # Flatten the TOC structure for easier lookup
-    flat_toc = {}
-    for part, items in toc_structure.items():
-        for item_num, item_data in items.items():
-            key = f"Part {part} - Item {item_num}"
-            if item_data["page"] is not None:
-                flat_toc[item_data["page"]] = {
-                    "key": key,
-                    "title": item_data["title"]
-                }
+def is_potential_table(text):
+    """
+    Use regex patterns to check if text might contain a table structure
     
-    # Group pages by TOC sections
-    section_pages = defaultdict(list)
-    current_section = "Introduction"
-    
-    for page in pages:
-        pdf_page_num = page.metadata.get('page', 0)  # PDF pages are 0-indexed
-        # Convert to displayed page number
-        displayed_page_num = pdf_page_num + page_offset
+    Args:
+        text: The text to check for table indicators
         
-        # Check if this page starts a new section
-        if displayed_page_num in flat_toc:
-            current_section = f"{flat_toc[displayed_page_num]['key']}: {flat_toc[displayed_page_num]['title']}"
-            # print(f"New section: {current_section}")
-        
-        # Add the page to the current section
-        page.metadata['section'] = current_section
-        section_pages[current_section].append(page)
+    Returns:
+        Boolean indicating if text likely contains a table
+    """
+    # Pattern 1: Multiple dollar signs with numbers (financial tables)
+    dollar_pattern = r'\$\s*[\d,]+(\.\d+)?'
+    if len(re.findall(dollar_pattern, text)) > 3:
+        logging.info("Table pattern detected: Financial data with dollar signs")
+        return True
     
-    # Now chunk each section with context-aware boundaries
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500, 
-        chunk_overlap=50,
-        separators=["\n\n", "\n", ". ", " ", ""]
-    )
+    # Pattern 2: Row-like structures with consistent separators
+    row_pattern = r'(.*?\s{2,}.*?\s{2,}.*?){3,}'
+    if re.search(row_pattern, text, re.MULTILINE):
+        logging.info("Table pattern detected: Row-like structure with aligned columns")
+        return True
     
-    for section, pages in section_pages.items():
-        section_chunks = text_splitter.split_documents(pages)
-        for chunk in section_chunks:
-            # Ensure the section is recorded in metadata
-            chunk.metadata['section'] = section
-        docs.extend(section_chunks)
+    # Pattern 3: Year or date headers in tables
+    year_pattern = r'(19|20)\d{2}\s*(\(.*?\))?'
+    date_headers = re.findall(year_pattern, text)
+    if len(date_headers) >= 2:
+        logging.info("Table pattern detected: Multiple year/date references")
+        return True
     
-    return docs
+    # Pattern 4: Headers with "Total" or financial terms
+    financial_terms = ['total', 'revenue', 'cost', 'gross', 'net', 'income', 'profit', 'loss', 'assets', 'liabilities']
+    term_count = sum(1 for term in financial_terms if re.search(r'\b' + term + r'\b', text.lower()))
+    if term_count >= 3:
+        logging.info(f"Table pattern detected: Contains {term_count} financial terms")
+        return True
+    
+    # Pattern 5: Contains "Table" or "in millions" keywords
+    if re.search(r'\btable\b|\bin millions\b|\bin thousands\b|\b\(\$\s*in\b', text.lower()):
+        logging.info("Table pattern detected: Contains explicit table indicators")
+        return True
+    
+    # Pattern 6: Numerical grid pattern - rows of numbers aligned in columns
+    num_columns_pattern = r'(\d+[.,]?\d*\s+){3,}'
+    if re.search(num_columns_pattern, text):
+        logging.info("Table pattern detected: Grid of numbers")
+        return True
+    
+    # Pattern 7: Securities, assets, or financial instrument listings
+    securities_pattern = r'\b(securities|assets|cash|equity|debt|government)\b'
+    if re.search(securities_pattern, text.lower()) and re.search(r'\d+[.,]\d+', text):
+        logging.info("Table pattern detected: Financial instruments with values")
+        return True
+    
+    logging.info("No table patterns detected in text")
+    return False
 
 def add_toc_metadata(pages, toc_structure=None, page_offset=0):
     """Assign section metadata to pages based on TOC structure without chunking"""
@@ -335,7 +422,6 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
             for header_doc in header_split_docs:
                 # Start with existing TOC metadata
                 combined_metadata = toc_metadata.copy()
-                
                 # Add header path to metadata
                 header_path = []
                 for level in ["h1", "h2", "h3"]:
@@ -346,7 +432,7 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
                 
                 if header_path:
                     combined_metadata["header_path"] = " > ".join(header_path)
-                
+            
                 # Further split large sections
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=500,
@@ -366,6 +452,11 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
                     
                     # Add combined TOC and header metadata
                     chunk_metadata.update(combined_metadata)
+                    
+                    # Check if this chunk contains a financial table
+                    is_financial_table = is_potential_table(chunk)
+                    if is_financial_table:
+                        chunk_metadata["is_financial_table"] = True
                     
                     # Add original document metadata
                     for key, value in doc.metadata.items():
@@ -403,6 +494,11 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
                 chunk_metadata["chunk_index"] = i
                 chunk_metadata["split_method"] = "fallback_text_only"
                 
+                # Check if this chunk contains a financial table
+                is_financial_table = is_potential_table(chunk)
+                if is_financial_table:
+                    chunk_metadata["is_financial_table"] = True
+                
                 structured_doc = Document(
                     page_content=chunk,
                     metadata=chunk_metadata
@@ -410,6 +506,7 @@ def structure_splitting(documents: List[Document]) -> List[Document]:
                 structured_docs.append(structured_doc)
                 
     return structured_docs
+
 if uploaded_files:
     documents = []
     
@@ -442,7 +539,8 @@ if uploaded_files:
                                 toc_structure = extract_toc_structure(page.page_content if file.name!="MSFT 10-K.pdf" else page.page_content+pdf_pages[i+1].page_content)
                                 toc_structures[file.name] = toc_structure
                                 logging.info(f"Extracted TOC structure: {toc_structure}")
-                                with open(f'C:/Projects/Chatbot-AIEB/monica/temp/{file.name}_TOC.txt', 'w', encoding='utf-8') as file1:
+                                os.makedirs('./temp', exist_ok=True)
+                                with open(f'./temp/{file.name}_TOC.txt', 'w', encoding='utf-8') as file1:
                                     json.dump(toc_structure, file1, ensure_ascii=False, indent=4)
                                 break
                             except Exception as e:
@@ -464,8 +562,6 @@ if uploaded_files:
                     file_pages = [p for p in all_pages if p.metadata['source_file'] == file_name]
                     toc_structure = toc_structures.get(file_name)
                     page_offset = page_offsets.get(file_name, 0)
-                    # Create toc chunks for this file
-                    # file_docs = toc_splitting(file_pages, toc_structure, page_offset)
                     file_docs = add_toc_metadata(file_pages, toc_structure, page_offset)
                     documents.extend(file_docs)
                 # Split documents into chunks with structure awareness
@@ -473,11 +569,8 @@ if uploaded_files:
                 
                 logging.info(f"Created {len(structured_docs)} document chunks from {len(uploaded_files)} files")
                 # Generate embeddings and store in FAISS
-                # ------------------------------------------------- #
                 embeddings = OpenAIEmbeddings()
-                # use your embeddings model here
                 st.session_state.vector_store = FAISS.from_documents(structured_docs, embeddings)
-                # ------------------------------------------------- #
 
         st.success("✅ PDFs uploaded and processed! You can now start chatting.")
     
@@ -501,10 +594,10 @@ if uploaded_files:
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        # Configure retriever with more advanced parameters
+        # Configure retriever with advanced parameters
         retriever = st.session_state.vector_store.as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
-            search_kwargs={"k": 8, "fetch_k": 40, "lambda_mult": 0.8}  # Adjust these parameters as needed
+            search_kwargs={"k": 12, "fetch_k": 50, "lambda_mult": 0.7}
         )
         
         # Get chat history for context
@@ -514,49 +607,93 @@ if uploaded_files:
                 role = "User" if msg["role"] == "user" else "Assistant"
                 chat_history += f"{role}: {msg['content']}\n\n"
         
-        # Create the QA chain with the custom prompt
-        # The RetrievalQA chain will automatically handle getting the context from the retriever
-        # and formatting it with the prompt template
+        # First retrieve documents and separate financial tables from regular text
+        with st.spinner("Retrieving relevant information..."):
+            retrieved_docs = retriever.get_relevant_documents(user_input)
+            
+            # Separate financial table chunks from regular chunks
+            financial_table_chunks = []
+            regular_chunks = []
+            
+            for doc in retrieved_docs:
+                if doc.metadata.get("is_financial_table", False):
+                    financial_table_chunks.append(doc)
+                else:
+                    regular_chunks.append(doc)
+            
+            logging.info(f"Retrieved {len(retrieved_docs)} docs: {len(financial_table_chunks)} financial tables and {len(regular_chunks)} regular chunks")
+        
+        # Initialize OpenAI client
+        llm = ChatOpenAI(model_name="gpt-4o", temperature=0.5)
+        
+        # Special handling for financial tables if present
+        table_analysis = ""
+        if financial_table_chunks:
+            with st.spinner("Analyzing financial tables..."):
+                table_analysis, table_data = process_financial_tables(financial_table_chunks, user_input, llm)
+                logging.info(f"Financial table analysis completed")
+        
+        # Create enhanced prompt with table analysis if available
+        enhanced_prompt = f"""
+        {persona}
+        
+        Chat History:
+        <history>
+        {chat_history}
+        </history>
+        
+        {table_analysis if financial_table_chunks else ""}
+        
+        Given the context information and not prior knowledge, answer the following question:
+        Question: {user_input}
+        """
+        
+        # Create a QA chain to handle the regular chunks
         qa_chain = RetrievalQA.from_chain_type(
-            ## use your llm model here
-            llm=ChatOpenAI(model_name="gpt-4o", temperature=0.5),
+            llm=llm,
             retriever=retriever,
             chain_type="stuff",  # "stuff" chain type puts all retrieved documents into the prompt context
             return_source_documents=True,  # Return source documents for reference
             verbose=True,
             chain_type_kwargs={
-                # "prompt": CUSTOM_PROMPT,  # Use the custom prompt
                 "verbose": True  # Enable verbose mode to see the full prompt
             }
         )
-        # ------------------------------------------------- #
         
-        # Get response from the chatbot with spinner
-        with st.spinner("Thinking..."):
-            # The RetrievalQA chain automatically:
-            # 1. Takes the query
-            # 2. Retrieves relevant documents using the retriever
-            # 3. Formats those documents as the context in the prompt
-            # 4. Sends the formatted prompt to the LLM
+        # Get response with enhanced prompt that includes table analysis
+        with st.spinner("Generating response..."):
             response = qa_chain.invoke({
-                "query": template.format(
-                    persona=persona,
-                    user_input=user_input,
-                    chat_history=chat_history
-                ),
+                "query": enhanced_prompt,
             })
             
             # Display retrieved chunks in an expander if source documents are available
             if "source_documents" in response:
                 with st.expander("View Retrieved Chunks (Context)"):
+                    # First show financial table chunks if present
+                    if financial_table_chunks:
+                        st.markdown("### Financial Table Chunks")
+                        for i, doc in enumerate(financial_table_chunks):
+                            st.markdown(f"**Financial Table {i+1}**")
+                            st.markdown(f"**Content:** {doc.page_content}")
+                            st.markdown(f"**Source:** {doc.metadata.get('source_file', 'Unknown')}, Page {doc.metadata.get('page', 'Unknown')}")
+                            if 'section' in doc.metadata:
+                                st.markdown(f"**Section:** {doc.metadata.get('section', 'Unknown')}")
+                            if 'header_path' in doc.metadata:
+                                st.markdown(f"**Path:** {doc.metadata.get('header_path', 'Unknown')}")
+                            st.markdown("---")
+                    
+                    # Then show regular chunks
+                    st.markdown("### Regular Document Chunks")
                     for i, doc in enumerate(response["source_documents"]):
-                        st.markdown(f"**Chunk {i+1}**")
-                        st.markdown(f"**Content:** {doc.page_content}")
-                        section_info = f"**Section:** {doc.metadata.get('section', 'Unknown')}" if 'section' in doc.metadata else ""
-                        if section_info:
-                            st.markdown(section_info)
-                        st.markdown(f"**Source:** {doc.metadata.get('source_file', 'Unknown')}, Page {doc.metadata.get('page', 'Unknown')}, Level: {doc.metadata.get('header_path','Unknown')}")
-                        st.markdown("---")
+                        if not doc.metadata.get("is_financial_table", False):  # Skip table chunks here
+                            st.markdown(f"**Chunk {i+1}**")
+                            st.markdown(f"**Content:** {doc.page_content}")
+                            st.markdown(f"**Source:** {doc.metadata.get('source_file', 'Unknown')}, Page {doc.metadata.get('page', 'Unknown')}")
+                            if 'section' in doc.metadata:
+                                st.markdown(f"**Section:** {doc.metadata.get('section', 'Unknown')}")
+                            if 'header_path' in doc.metadata:
+                                st.markdown(f"**Path:** {doc.metadata.get('header_path', 'Unknown')}")
+                            st.markdown("---")
             
             response_text = response["result"]
             
