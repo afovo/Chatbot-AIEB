@@ -1,0 +1,102 @@
+{
+    "I": {
+        "1": {
+            "title": "Business",
+            "page": 3
+        },
+        "1A": {
+            "title": "Risk Factors",
+            "page": 6
+        },
+        "1B": {
+            "title": "Unresolved Staff Comments",
+            "page": 16
+        },
+        "1C": {
+            "title": "Cybersecurity",
+            "page": 17
+        },
+        "2": {
+            "title": "Properties",
+            "page": 18
+        },
+        "3": {
+            "title": "Legal Proceedings",
+            "page": 18
+        },
+        "4": {
+            "title": "Mine Safety Disclosures",
+            "page": 18
+        }
+    },
+    "II": {
+        "5": {
+            "title": "Market for the Registrant’s Common Stock, Related Shareholder Matters, and Issuer Purchases of Equity Securities",
+            "page": 19
+        },
+        "6": {
+            "title": "Reserved",
+            "page": 19
+        },
+        "7": {
+            "title": "Management’s Discussion and Analysis of Financial Condition and Results of Operations",
+            "page": 20
+        },
+        "7A": {
+            "title": "Quantitative and Qualitative Disclosures About Market Risk",
+            "page": 31
+        },
+        "8": {
+            "title": "Financial Statements and Supplementary Data",
+            "page": 33
+        },
+        "9": {
+            "title": "Changes in and Disagreements with Accountants on Accounting and Financial Disclosure",
+            "page": 70
+        },
+        "9A": {
+            "title": "Controls and Procedures",
+            "page": 70
+        },
+        "9B": {
+            "title": "Other Information",
+            "page": 72
+        },
+        "9C": {
+            "title": "Disclosure Regarding Foreign Jurisdictions that Prevent Inspections",
+            "page": 72
+        }
+    },
+    "III": {
+        "10": {
+            "title": "Directors, Executive Officers, and Corporate Governance",
+            "page": 72
+        },
+        "11": {
+            "title": "Executive Compensation",
+            "page": 72
+        },
+        "12": {
+            "title": "Security Ownership of Certain Beneficial Owners and Management and Related Shareholder Matters",
+            "page": 72
+        },
+        "13": {
+            "title": "Certain Relationships and Related Transactions, and Director Independence",
+            "page": 72
+        },
+        "14": {
+            "title": "Principal Accountant Fees and Services",
+            "page": 73
+        }
+    },
+    "IV": {
+        "15": {
+            "title": "Exhibits, Financial Statement Schedules",
+            "page": 74
+        },
+        "16": {
+            "title": "Form 10-K Summary",
+            "page": 76
+        }
+    }
+}
