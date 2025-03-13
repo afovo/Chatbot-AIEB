@@ -158,14 +158,13 @@ If you cannot answer the question based SOLELY on this table data, state that cl
 ### 1. Hallucination Experiment
 
 - **Potential Causes of Hallucinations**
-Extrapolation from Incomplete Information.
-Overconfidence in Responses.
-Tokenization and Context Window Issues.
-The question is beyond the model's knowledge scope, has logical errors or wrong premises.
+fact Detailed questions/calculations 
+Logical consistency testing 
+Ask for something that does not appear in the local file
+Deliberately Induce model misunderstanding promblems - increase or decrease the scope of the problem 
 
-- **Avoid Hallucinations**
-Add enhancing prompts. (e.g., If the answer is not in the documents, say "I don't have enough information to answer this question.")
-Use system prompt by LLMchain: "Use the following pieces of context to answer the user's question. If you don't know the answer, just say that you don't know, don't try to make up an answer."
+- **Over Over-reliance on prompts**
+"If you can't find it, just say you don't know" prompt is  also a built-in prompt in LangChain.  
 
 ### 2. Structure Preservation Challenges
 
