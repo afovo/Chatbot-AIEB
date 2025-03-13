@@ -7,31 +7,29 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
+from langchain.prompts import PromptTemplate
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 import tempfile
 import time
 
 OPENAI_API_KEY = ""
-persona = '''
+
+# Custom prompt template for better answers
+CUSTOM_PROMPT_TEMPLATE = """
 You are a helpful assistant that answers questions based on the provided documents.
-Answer the question with detailed information from the documents. If the answer is not in the documents, 
-say "I don't have enough information to answer this question." Cite specific parts of the documents when possible.
-Consider the chat history for context when answering, but prioritize information from the documents.
-'''
+Please answer the question based on the following context information.
+If the answer is not in the documents, clearly state: "I don't have enough information to answer this question."
+Cite specific parts of the documents when possible.
 
-template = """
-{persona}
-        
-Chat History:
-<history>
-{chat_history}
-</history>
+Context:
+{context}
 
-Given the context information and not prior knowledge, answer the following question:
-Question: {user_input}
+Question: {question}
+Answer:
 """
 
-
-# Set Openai API key (replace with your key or use an env variable)
+# Set OpenAI API key
 os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
 
 st.set_page_config(page_title="Chat with Your PDFs (OpenAI)")
@@ -60,22 +58,26 @@ if uploaded_files:
                     documents.extend(loader.load())
 
                 # Split documents into chunks
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)  # Increased overlap
                 docs = text_splitter.split_documents(documents)
 
                 # Generate embeddings and store in FAISS
-                # ------------------------------------------------- #
                 embeddings = OpenAIEmbeddings()
-                # use your embeddings model here
                 st.session_state.vector_store = FAISS.from_documents(docs, embeddings)
-                # ------------------------------------------------- #
-
 
         st.success("✅ PDFs uploaded and processed! You can now start chatting.")
     
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
+        
+    # Create memory component for ConversationalRetrievalChain
+    if "memory" not in st.session_state:
+        st.session_state.memory = ConversationBufferMemory(
+            memory_key="chat_history",
+            return_messages=True,
+            output_key='answer'
+        )
 
     # Display chat history
     for message in st.session_state.messages:
@@ -93,71 +95,43 @@ if uploaded_files:
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        # Configure retriever with more advanced parameters
+        # Configure retriever with MMR search for more diverse results
         retriever = st.session_state.vector_store.as_retriever(
             search_type="mmr",  # Maximum Marginal Relevance
-            search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}  # Adjust these parameters as needed
+            search_kwargs={"k": 4, "fetch_k": 20, "lambda_mult": 0.7}  # Adjust these parameters for better results
         )
         
-        # Get chat history for context
-        chat_history = ""
-        if len(st.session_state.messages) > 1:  # If there are previous messages
-            for i, msg in enumerate(st.session_state.messages[:-1]):  # Exclude the current user message
-                role = "User" if msg["role"] == "user" else "Assistant"
-                chat_history += f"{role}: {msg['content']}\n\n"
+        # Create custom prompt template
+        PROMPT = PromptTemplate(
+            template=CUSTOM_PROMPT_TEMPLATE,
+            input_variables=["context", "question"]
+        )
         
-        # Create a custom prompt template with chat history
-        
-        
-        # Create the QA chain with the custom prompt
-        # The RetrievalQA chain will automatically handle getting the context from the retriever
-        # and formatting it with the prompt template
-        qa_chain = RetrievalQA.from_chain_type(
-            ## use your llm model here
+        # Use ConversationalRetrievalChain instead of RetrievalQA for better conversation handling
+        qa_chain = ConversationalRetrievalChain.from_llm(
             llm=ChatOpenAI(model_name="gpt-4o", temperature=0.5),
             retriever=retriever,
-            chain_type="stuff",  # "stuff" chain type puts all retrieved documents into the prompt context
-            return_source_documents=True,  # Return source documents for reference
-            verbose = True,
-            chain_type_kwargs={
-                # "prompt": CUSTOM_PROMPT,  # Use the custom prompt
-                "verbose": True  # Enable verbose mode to see the full prompt
-            }
+            memory=st.session_state.memory,
+            combine_docs_chain_kwargs={"prompt": PROMPT},
+            return_source_documents=True,
+            verbose=True
         )
-        # ------------------------------------------------- #
         
         # Get response from the chatbot with spinner
         with st.spinner("Thinking..."):
-            # The RetrievalQA chain automatically:
-            # 1. Takes the query
-            # 2. Retrieves relevant documents using the retriever
-            # 3. Formats those documents as the context in the prompt
-            # 4. Sends the formatted prompt to the LLM
-            response = qa_chain.invoke({
-                "query": template.format(
-                    persona=persona,
-                    user_input=user_input,
-                    chat_history=chat_history
-                ),
-            })
+            response = qa_chain({"question": user_input})
+            response_text = response["answer"]
+            source_docs = response["source_documents"]
             
-            # For debugging, you can see what's in the response
-            # st.write("Response keys:", list(response.keys()))
-            
-            # Display retrieved chunks in an expander if source documents are available
-            if "source_documents" in response:
-                with st.expander("View Retrieved Chunks (Context)"):
-                    for i, doc in enumerate(response["source_documents"]):
-                        st.markdown(f"**Chunk {i+1}**")
-                        st.markdown(f"**Content:** {doc.page_content}")
-                        st.markdown(f"**Source:** Page {doc.metadata.get('page', 'unknown')}")
-                        st.markdown("---")
-            
-            response_text = response["result"]
-        # Display assistant response
-        # with st.chat_message("assistant"):
-        #     st.markdown(response_text)
-
+            # Display retrieved chunks in an expander
+            with st.expander("View Retrieved Chunks (Context)"):
+                for i, doc in enumerate(source_docs):
+                    st.markdown(f"**Chunk {i+1}**")
+                    st.markdown(f"**Content:** {doc.page_content}")
+                    st.markdown(f"**Source:** Page {doc.metadata.get('page', 'unknown')}")
+                    st.markdown("---")
+        
+        # Display assistant response with streaming simulation
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
             full_response = ""
@@ -166,7 +140,7 @@ if uploaded_files:
                 full_response += chunk + " "
                 message_placeholder.markdown(full_response)
                 time.sleep(0.05)  # Small delay to simulate streaming
-                
+        
         # Store assistant response in session state
         st.session_state.messages.append({"role": "assistant", "content": response_text})
 else:
