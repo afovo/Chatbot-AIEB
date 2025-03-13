@@ -146,9 +146,9 @@ def process_financial_tables(table_chunks, query, llm):
         return f"Error processing financial tables: {str(e)}", {}
 
 
-st.set_page_config(page_title="Group 5 ChatBot")
+st.set_page_config(page_title="Team4 ChatBot (hallucination test)")
 
-st.title("📄💬 Group 5 ChatBot")
+st.title("📄💬 Team4 ChatBot (hallucination test)")
 
 # File uploader
 uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
