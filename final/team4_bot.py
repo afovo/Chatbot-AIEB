@@ -147,9 +147,9 @@ def process_financial_tables(table_chunks, query, llm):
         return f"Error processing financial tables: {str(e)}", {}
 
 
-st.set_page_config(page_title="Group 5 ChatBot")
+st.set_page_config(page_title="Team4 ChatBot")
 
-st.title("📄💬 Group 5 ChatBot")
+st.title("📄💬 Team4 ChatBot")
 
 # File uploader
 uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
@@ -722,14 +722,13 @@ if uploaded_files:
             response_text = response["result"]
             
         # Display assistant response
+
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
-            full_response = ""
-            # Simulate streaming with an existing string
-            for chunk in response_text.split():
-                full_response += chunk + " "
-                message_placeholder.markdown(full_response)
-                time.sleep(0.05)  # Small delay to simulate streaming
+            for i in range(len(response_text)):
+                message_placeholder.markdown(response_text[:i+1])
+                time.sleep(0.01) 
+
                 
         # Store assistant response in session state
         st.session_state.messages.append({"role": "assistant", "content": response_text})
