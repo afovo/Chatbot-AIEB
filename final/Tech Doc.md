@@ -1,4 +1,4 @@
-# PDF Analysis System Technical Documentation
+# Technical Documentation - Team4
 
 **Architecture Overview**
 
@@ -14,7 +14,7 @@ The system is designed to parse, analyze, and enable question-answering from fin
 
 ## Model Choices
 
-### 1. Final Choices
+### 1. Final Choice
 
 - **Embedding Model**: OpenAI Embeddings
 - **Primary LLM**: GPT-4o (temperature=0.5)
@@ -157,7 +157,15 @@ If you cannot answer the question based SOLELY on this table data, state that cl
 
 ### 1. Hallucination Experiment
 
-//TODO: yjy
+- **Potential Causes of Hallucinations**
+Extrapolation from Incomplete Information.
+Overconfidence in Responses.
+Tokenization and Context Window Issues.
+The question is beyond the model's knowledge scope, has logical errors or wrong premises.
+
+- **Avoid Hallucinations**
+Add enhancing prompts. (e.g., If the answer is not in the documents, say "I don't have enough information to answer this question.")
+Use system prompt by LLMchain: "Use the following pieces of context to answer the user's question. If you don't know the answer, just say that you don't know, don't try to make up an answer."
 
 ### 2. Structure Preservation Challenges
 
