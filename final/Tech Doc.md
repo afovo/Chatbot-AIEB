@@ -77,13 +77,6 @@ From the sample questions above, we can see that both models have some limitatio
 - **Vector Database**: FAISS (Facebook AI Similarity Search)
 - **Retrieval Method**: Maximum Marginal Relevance (MMR)
 
-### 2.4. Local Experiment
-
-| Model          |                       |      |
-| -------------- | --------------------- | ---- |
-|                |                       |      |
-|                |                       |      |
-| deepseek-r1:8b | 跑lrz的问题跑了10分钟 |      |
 
 ## 3. Document Processing and Embedding
 
